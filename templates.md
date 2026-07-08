@@ -677,7 +677,7 @@
 { "$": "search-transaction", "uuid": "expression" }
 ```
 
-- `$search-transaction`：待查詢的交易識別編號
+- `"uuid"`：待查詢的交易識別編號
 
 如果存在，回傳該交易，否則回傳 `undefined`
 
@@ -687,7 +687,7 @@
 { "$": "search-account", "uuid": "expression" }
 ```
 
-- `$search-account`：待查詢的科目代碼
+- `"uuid"`：待查詢的科目識別編號
 
 如果存在，回傳該科目，否則回傳 `undefined`
 
@@ -697,7 +697,7 @@
 { "$": "search-tag", "uuid": "expression" }
 ```
 
-- `$search-tag`：待查詢的標籤代碼
+- `"uuid"`：待查詢的標籤識別編號
 
 如果存在，回傳該標籤，否則回傳 `undefined`
 
