@@ -165,7 +165,7 @@ new Deltatime {
 
 ```
 {{
-  "account": searchAccount("code": "1111"),
+  "account": searchAccount("uuid": "..."),
   "amount": $100
 }}
 ```
@@ -176,7 +176,7 @@ new Deltatime {
 {
   "$": "pack",
   "pack": {
-    "account": { "$": "search-account", "uuid": "1111" },
+    "account": { "$": "search-account", "uuid": "..." },
     "amount": { "$": "amount", "amount": 100 }
   }
 }
@@ -323,8 +323,8 @@ new ColSuggestOption {
 
 ```
 new EntryLine {
-  "account": searchAccount("code": "1111"),
-  "tag": searchTag("code": "default"),
+  "account": searchAccount("uuid": "..."),
+  "tag": searchTag("uuid": "..."),
   "amount": $100,
   "note": "..."
 }
@@ -336,8 +336,8 @@ new EntryLine {
 {
   "$": "entry-line",
   "entry-line": {
-    "account": { "$": "search-account", "uuid": "1111" },
-    "tag": { "$": "search-tag", "uuid": "default" },
+    "account": { "$": "search-account", "uuid": "..." },
+    "tag": { "$": "search-tag", "uuid": "..." },
     "amount": { "$": "amount", "amount": 100 },
     "note": "..."
   }
@@ -672,7 +672,8 @@ rev <expr>
 insert("array": myArray, "index": 0, "value": 42)
 peek("array": myArray, "index": -1)
 clear("array": myArray)
-slice("array": myArray, "from": 1, "to": 5, "step": 2)```
+slice("array": myArray, "from": 1, "to": 5, "step": 2)
+```
 
 表單呼叫：
 
@@ -686,8 +687,8 @@ form("title": "記帳", "columns": [
 查詢呼叫：
 
 ```
-searchAccount("code": "1111")
-searchTag("code": "default")
+searchAccount("uuid": "...")
+searchTag("uuid": "...")
 ```
 
 任務建立：
@@ -703,8 +704,8 @@ createTask(
       log("執行提醒腳本");
       createEntry(
         "lines": [
-          EntryLine { "account": searchAccount("code": "1111"), "amount": $100 },
-          EntryLine { "account": searchAccount("code": "5111"), "amount": -$100 }
+          EntryLine { "account": searchAccount("uuid": "..."), "amount": $100 },
+          EntryLine { "account": searchAccount("uuid": "..."), "amount": -$100 }
         ]
       );
     }
@@ -717,8 +718,8 @@ createTask(
 ```
 createEntry(
   "lines": [
-    EntryLine { "account": searchAccount("code": "1111"), "amount": $100 },
-    EntryLine { "account": searchAccount("code": "5111"), "amount": -$100 }
+    EntryLine { "account": searchAccount("uuid": "..."), "amount": $100 },
+    EntryLine { "account": searchAccount("uuid": "..."), "amount": -$100 }
   ],
   "transaction": myTransaction,
   "description": "..."
