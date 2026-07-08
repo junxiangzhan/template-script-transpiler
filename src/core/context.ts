@@ -48,33 +48,3 @@ export class CompilerContext<T> extends SymbolTable<T> implements DiagnosticColl
         this.diagnostics.push({ type: "error", message, offset, length });
     }
 }
-
-// const CHUNK_SIZE = 65536; // 64 KiB
-
-// export class CompilerContext {
-//     public source: ArrayBufferLike;
-
-//     constructor(source: ArrayBufferLike) {
-//         this.source = source;
-//     }
-
-//     *charStream(): IterableIterator<string> {
-//         const decoder = new TextDecoder("utf-8", { ignoreBOM: true });
-//         const view = new Uint8Array(this.source);
-
-//         for (let offset = 0; offset < view.byteLength; offset += CHUNK_SIZE) {
-//             const chunk = view.subarray(offset, offset + CHUNK_SIZE);
-//             const decodedChunk = decoder.decode(chunk, { stream: true });
-
-//             for (const char of decodedChunk)
-//                 yield char;
-//         }
-
-//         const remaining = decoder.decode();
-//         if (remaining.length > 0)
-//             for (const char of remaining)
-//                 yield char;
-
-//         yield ""; // EOF
-//     }
-// }
