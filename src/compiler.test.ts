@@ -153,8 +153,8 @@ describe("Template Script Transpiler", () => {
         const source = `
             template testFunctions(
             ) do {
-                a = searchAccount("code": "1111");
-                t = searchTag("code": "default");
+                a = searchAccount("uuid": "...");
+                t = searchTag("uuid": "...");
                 log("value": a);
             }
         `;
@@ -167,12 +167,12 @@ describe("Template Script Transpiler", () => {
                 {
                     "$": "set",
                     "target": "a",
-                    "value": { "$": "search-account", "code": "1111" }
+                    "value": { "$": "search-account", "uuid": "..." }
                 },
                 {
                     "$": "set",
                     "target": "t",
-                    "value": { "$": "search-tag", "code": "default" }
+                    "value": { "$": "search-tag", "uuid": "..." }
                 },
                 {
                     "$": "log",
