@@ -294,10 +294,10 @@ new ColGroup {
 
 ### 推薦選項
 
-使用 `ColSuggestOption` 建構式建立推薦選項物件：
+使用 `SuggestOption` 建構式建立推薦選項物件：
 
 ```
-new ColSuggestOption {
+new SuggestOption {
   "value": $250,
   "name": "...",
   "description": "..."
@@ -389,7 +389,7 @@ myArray.length
 - `Amount`：金額建構式
 - `ColBoolean`、`ColNumber`、`ColString`、`ColTransaction`、`ColAccount`、`ColTag`、`ColDatetime`、`ColDate`、`ColTime`、`ColAmount`：表單欄位建構式
 - `ColGroup`：欄位群組建構式
-- `ColSuggestOption`：推薦選項建構式
+- `SuggestOption`：推薦選項建構式
 - `EntryLine`：分錄行建構式
 
 內建函數識別符：
