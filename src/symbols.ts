@@ -205,6 +205,12 @@ export function setDefaultSymbol(symbolTable: SymbolTable<BuiltInSymbol>) {
         fieldName: `"col"`,
         insertField: `"type": "datetime"`
     });
+    symbolTable.setSymbol("ColDate", {
+        type: SymbolType.BuiltInConstructor,
+        commandName: `"col"`,
+        fieldName: `"col"`,
+        insertField: `"type": "date"`
+    });
     symbolTable.setSymbol("ColTime", {
         type: SymbolType.BuiltInConstructor,
         commandName: `"col"`,
