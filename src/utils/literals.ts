@@ -34,7 +34,6 @@ export interface Duration {
 }
 
 const regexISO8601TimeStamp = /^(\d{4})-(\d{2})-(\d{2})(?:t(\d{2})(?::(\d{2})(?::(\d{2})(?:\.(\d{1,9}))?)?)?)?$/i;
-const regexISO8601Duration = /^p(\d{1,9}y)(\d{1,9}m)(\d{1,9}w)(\d{1,9}d)(t)?(\d{1,9}h)?(\d{1,9}m)?(\d{1,9}s)?$/i;
 
 export function parseDateTime(str: string): PlainDateTime {
     if (typeof Temporal !== "undefined") {
@@ -116,6 +115,8 @@ export function parseDateTime(str: string): PlainDateTime {
     };
 }
 
+const regexISO8601Duration = /^p(?:(\d{1,9})y)?(?:(\d{1,9})m)?(?:(\d{1,9})w)?(?:(\d{1,9})d)?(?:(t)(?:(\d{1,9})h)?(?:(\d{1,9})m)?(?:(\d{1,9})(?:\.(\d{1,9}))?s)?)?$/i;
+
 export function parseDuration(str: string): Duration {
     if (typeof Temporal !== "undefined") {
         const dur = (Temporal as any).Duration.from(str);
@@ -134,23 +135,25 @@ export function parseDuration(str: string): Duration {
     const match = str.match(regexISO8601Duration);
     if (!match) throw new Error("Invalid Duration format");
 
-    const [_fullMatch, yearsString, monthsString, weeksString, daysString, tPart, hoursString, minutesString, secondsString] = match;
+    const [_fullMatch, yearsString, monthsString, weeksString, daysString, tPart, hoursString, minutesString, secondsString, nanosecondsString] = match;
 
-    const years = yearsString ? parseInt(yearsString.slice(0, -1), 10) : undefined;
-    const months = monthsString ? parseInt(monthsString.slice(0, -1), 10) : undefined;
-    const weeks = weeksString ? parseInt(weeksString.slice(0, -1), 10) : undefined;
-    const days = daysString ? parseInt(daysString.slice(0, -1), 10) : undefined;
-    const hours = hoursString ? parseInt(hoursString.slice(0, -1), 10) : undefined;
-    const minutes = minutesString ? parseInt(minutesString.slice(0, -1), 10) : undefined;
-    const seconds = secondsString ? parseInt(secondsString.slice(0, -1), 10) : undefined;
+    const years = yearsString ? parseInt(yearsString, 10) : undefined;
+    const months = monthsString ? parseInt(monthsString, 10) : undefined;
+    const weeks = weeksString ? parseInt(weeksString, 10) : undefined;
+    const days = daysString ? parseInt(daysString, 10) : undefined;
+    const hours = hoursString ? parseInt(hoursString, 10) : undefined;
+    const minutes = minutesString ? parseInt(minutesString, 10) : undefined;
+    const seconds = secondsString ? parseFloat(secondsString) : undefined;
+    const nanoseconds = nanosecondsString ? parseInt(nanosecondsString.padEnd(9, "0"), 10) : undefined;
 
     if (tPart == undefined && (hours !== undefined || minutes !== undefined || seconds !== undefined))
+        throw new Error("Invalid Duration format: 't' is required before time components");
+
+    if (tPart !== undefined && hours === undefined && minutes === undefined && seconds === undefined)
         throw new Error("Invalid Duration format: Time part is required");
 
     if (years === undefined && months === undefined && weeks === undefined && days === undefined && hours === undefined && minutes === undefined && seconds === undefined)
         throw new Error("Invalid Duration format: At least one component is required");
-
-
 
     return {
         years: years ?? 0,
@@ -160,6 +163,6 @@ export function parseDuration(str: string): Duration {
         hours: hours ?? 0,
         minutes: minutes ?? 0,
         seconds: seconds ?? 0,
-        nanoseconds: 0
+        nanoseconds: nanoseconds ?? 0
     };
 }
