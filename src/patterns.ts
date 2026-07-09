@@ -245,7 +245,7 @@ export class DispatchPattern implements Pattern<RawTokenType> {
                 this.pattern = new StringLikePattern();
             } else if (char === "@" || char === "$") {
                 this.pattern = new TimeOrAmountLikePattern();
-            } else if (/\p{Alphabetic}/u.test(char)) {
+            } else if (/\p{Alphabetic}|_/u.test(char)) {
                 this.pattern = new WordPattern();
             } else if (/\d/u.test(char)) {
                 this.pattern = new NumberLikePattern();

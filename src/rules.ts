@@ -1,6 +1,6 @@
 import { ParserStateType, ParserPanicError } from "./core/parser";
-import type { ParserTokenState, ParserRuleState, ParsingRule, RecoveryCondition, PeekableTokenStream } from "./core/parser";
-import type { Token } from "./core/token";
+import type { ParserTokenState, ParserRuleState, ParsingRule, RecoveryCondition, ParserState } from "./core/parser";
+import type { Token, PeekableTokenStream } from "./core/token";
 
 import { TokenType } from "./tokens";
 import { NodeType } from "./parsing-tree";
@@ -43,12 +43,8 @@ export function token<T extends TokenType>(tokenType: T, errorMessage: (butGot: 
     return {
         type: ParserStateType.Token,
         tokenType,
-        onMissing: (parser, context, butGot) => {
-            context.error(
-                errorMessage(butGot),
-                butGot?.offset ?? parser.offset, // if butGot is undefined (EOF), use the parser's current offset (EOF position)
-                butGot?.length ?? 0
-            );
+        onMissing: (context, butGot) => {
+            context.error(errorMessage(butGot), butGot?.offset, butGot?.length);
             return tokenType; // Return the expected token type to allow parsing to continue
         }
     }
@@ -69,7 +65,7 @@ export function optionalToken<T extends TokenType>(tokenType: T): ParserTokenSta
     };
 }
 
-export function rule<T extends readonly any[], R>(parsingRule: ParsingRule<TokenType, T, R, BuiltInSymbol>, recoveryWhen?: RecoveryCondition<TokenType, R> | { action: undefined }): ParserRuleState<TokenType, R> {
+export function rule<StateSequence extends readonly ParserState<TokenType>[], ReturnType>(parsingRule: ParsingRule<BuiltInSymbol, TokenType, ReturnType, StateSequence>, recoveryWhen?: RecoveryCondition<TokenType, ReturnType> | { action: undefined }): ParserRuleState<TokenType, ReturnType> {
     return {
         type: ParserStateType.Rule,
         rule: parsingRule,
@@ -93,11 +89,11 @@ interface listRuleOptions<R> {
 }
 
 const emptyItem: ParserRuleState<TokenType, undefined> = rule({
-    getRule() { return [] as const; },
+    rule() { return [] as const; },
     action() { return undefined; }
 });
 
-export function listRule<T extends readonly any[], R>(itemRule: ParsingRule<TokenType, T, R, BuiltInSymbol> | ParserRuleState<TokenType, R>, options: listRuleOptions<R>): ParserRuleState<TokenType, R[]> {
+export function listRule<StateSequence extends readonly ParserState<TokenType>[], ReturnType>(itemRule: ParsingRule<BuiltInSymbol, TokenType, ReturnType, StateSequence> | ParserRuleState<TokenType, ReturnType>, options: listRuleOptions<ReturnType>): ParserRuleState<TokenType, ReturnType[]> {
     const tolerance = options.tolerance ?? ListRuleTolerance.noTolerance;
 
     const item = rule(
@@ -112,7 +108,7 @@ export function listRule<T extends readonly any[], R>(itemRule: ParsingRule<Toke
     );
 
     const restItem = rule({
-        getRule(parser) {
+        rule(parser) {
             const peeked = parser.peekIf(options.separators);
             if (peeked) {
                 return [
@@ -129,13 +125,13 @@ export function listRule<T extends readonly any[], R>(itemRule: ParsingRule<Toke
                 return [];
             } else {
                 const [_, itemResults] = result;
-                return itemResults as R[];
+                return itemResults as ReturnType[];
             }
         }
     });
 
     const afterSeparator = rule({
-        getRule(parser) {
+        rule(parser) {
             let peeked;
 
             peeked = parser.peekIf(options.endBoundaries);
@@ -154,18 +150,18 @@ export function listRule<T extends readonly any[], R>(itemRule: ParsingRule<Toke
             ] as const;
         },
 
-        action(result: readonly any[]): R[] {
+        action(result: readonly any[]): ReturnType[] {
             if (result.length === 0)
                 return [];
 
             return result[0] === undefined
                 ? result[1]
-                : [result[0], ...(result[1] as R[])];
+                : [result[0], ...(result[1] as ReturnType[])];
         }
     });
 
     return rule({
-        getRule(parser) {
+        rule(parser) {
             let peeked;
 
             peeked = parser.peekIf(options.endBoundaries);
@@ -183,7 +179,7 @@ export function listRule<T extends readonly any[], R>(itemRule: ParsingRule<Toke
                 recursive(() => restItem)
             ] as const;
         },
-        action(result: readonly any[]): R[] {
+        action(result: readonly any[]): ReturnType[] {
             if (result.length === 0) {
                 return [];
             } else {
@@ -203,7 +199,7 @@ export function dummyToken<T extends TokenType>(tokenType: T, parser: PeekableTo
     const butGot = parser.peek();
     return {
         type: tokenType,
-        offset: butGot?.offset ?? parser.offset,
+        offset: butGot?.offset ?? -1,
         length: butGot?.length ?? 0,
         isMissing: true
     };
@@ -218,7 +214,7 @@ export function recursive(callback: () => any): any {
 // program (root)
 
 export const program = rule({
-    getRule() {
+    rule() {
         return [programItems] as const;
     },
 
@@ -231,7 +227,7 @@ export const program = rule({
 });
 
 const programItems = rule({
-    getRule(parser) {
+    rule(parser) {
         if (parser.peekIf([TokenType.KeywordTemplate])) {
             return [
                 templateDeclaration,
@@ -260,7 +256,7 @@ const programItems = rule({
 // template and function declaration
 
 const templateDeclaration = rule({
-    getRule() {
+    rule() {
         return [
             assertToken(TokenType.KeywordTemplate),
             identifier,
@@ -295,7 +291,7 @@ const templateDeclaration = rule({
 });
 
 const functionDeclaration = rule({
-    getRule() {
+    rule() {
         return [
             assertToken(TokenType.KeywordFunction),
             identifier,
@@ -329,7 +325,7 @@ const functionDeclaration = rule({
 });
 
 const parameterDeclaration = listRule({
-    getRule() {
+    rule() {
         return [
             identifier,
             token(TokenType.OperatorAssign, () => "Expected '=' in parameter declaration"),
@@ -467,7 +463,7 @@ function parseExpression(nodes: (Expression | Token<TokenType>)[]): Expression {
 }
 
 const expression = rule({
-    getRule() {
+    rule() {
         return [expressionGather] as const;
     },
 
@@ -478,7 +474,7 @@ const expression = rule({
 });
 
 const expressionGather = rule({
-    getRule() {
+    rule() {
         return [
             expressionPrimary,
             expressionWithLeadingOperator
@@ -491,7 +487,7 @@ const expressionGather = rule({
 });
 
 const expressionWithLeadingOperator = rule({
-    getRule(parser) {
+    rule(parser) {
         let peeked = parser.peekIf(infixOperatorTokenTypes)
         if (peeked) {
             return [
@@ -514,7 +510,7 @@ const expressionWithLeadingOperator = rule({
 });
 
 const expressionPrimary = rule({
-    getRule(parser) {
+    rule(parser) {
         if (parser.peekIf([TokenType.KeywordDo])) {
             return [recursive(() => doExpression), postfixOperations] as const;
         } else if (parser.peekIf([TokenType.KeywordIf])) {
@@ -571,7 +567,7 @@ const expressionPrimary = rule({
 // unary operation
 
 const unaryOperation = rule({
-    getRule(parser) {
+    rule(parser) {
         let peeked = parser.peekIf(prefixOperatorTokenTypes);
         if (peeked) {
             return [
@@ -596,7 +592,7 @@ const unaryOperation = rule({
 // postfix operations
 
 const postfixOperations = rule({
-    getRule(parser) {
+    rule(parser) {
         if (parser.peekIf([TokenType.SymbolDot, TokenType.SymbolLeftParen])) {
             return [
                 postfixOperationItem,
@@ -617,7 +613,7 @@ const postfixOperations = rule({
 });
 
 const postfixOperationItem = rule({
-    getRule(parser) {
+    rule(parser) {
         if (parser.peekIf([TokenType.SymbolDot])) {
             return [recursive(() => accessPostfix)] as const;
         } else if (parser.peekIf([TokenType.SymbolLeftParen])) {
@@ -633,7 +629,7 @@ const postfixOperationItem = rule({
 // 
 
 const optionalExpression = rule({
-    getRule(parser) {
+    rule(parser) {
         if (parser.peekIf(expressionFirstTokenTypes)) {
             return [expression] as const;
         } else {
@@ -653,7 +649,7 @@ const optionalExpression = rule({
 // do expression
 
 const doExpression = rule({
-    getRule() {
+    rule() {
         return [
             assertToken(TokenType.KeywordDo),
             token(TokenType.SymbolLeftBrace, () => "Expected '{' for do expression"),
@@ -678,7 +674,7 @@ const doExpression = rule({
 });
 
 const doExpressionBody: ParserRuleState<TokenType, Expression[]> = rule({
-    getRule(parser) {
+    rule(parser) {
         if (parser.peekIf([TokenType.SymbolRightBrace])) {
             return [] as const;
         } else if (parser.peekIf([TokenType.SymbolSemicolon])) {
@@ -716,7 +712,7 @@ const doExpressionBody: ParserRuleState<TokenType, Expression[]> = rule({
 // if expression
 
 const ifExpression = rule({
-    getRule() {
+    rule() {
         return [
             ifExpressionWithoutElse,
             ifExpressionElse
@@ -752,7 +748,7 @@ const ifExpression = rule({
 });
 
 const ifExpressionWithoutElse = rule({
-    getRule() {
+    rule() {
         return [
             assertToken(TokenType.KeywordIf),
             optionalToken(TokenType.OperatorNot),
@@ -772,7 +768,7 @@ const ifExpressionWithoutElse = rule({
 });
 
 const ifExpressionElse = rule({
-    getRule(parser) {
+    rule(parser) {
         if (parser.peekIf([TokenType.KeywordElse])) {
             return [
                 assertToken(TokenType.KeywordElse),
@@ -793,7 +789,7 @@ const ifExpressionElse = rule({
 // for expression
 
 const forExpression = rule({
-    getRule() {
+    rule() {
         return [
             assertToken(TokenType.KeywordFor),
             token(TokenType.SymbolLeftParen, () => "Expected '(' for for expression"),
@@ -835,7 +831,7 @@ const forExpression = rule({
 });
 
 const forExpressionCondition = listRule({
-    getRule() {
+    rule() {
         return [
             expression,
             forExpressionItemRest
@@ -863,7 +859,7 @@ const forExpressionCondition = listRule({
 });
 
 const forExpressionItemRest = rule({
-    getRule(parser) {
+    rule(parser) {
         if (parser.peekIf([TokenType.KeywordIn])) {
             return [
                 assertToken(TokenType.KeywordIn),
@@ -885,7 +881,7 @@ const forExpressionItemRest = rule({
 //
 
 const whileExpression = rule({
-    getRule() {
+    rule() {
         return [
             assertToken(TokenType.KeywordWhile),
             optionalToken(TokenType.OperatorNot),
@@ -933,7 +929,7 @@ const whileExpression = rule({
 //
 
 const returnExpression = rule({
-    getRule() {
+    rule() {
         return [
             assertToken(TokenType.KeywordReturn),
             optionalExpression
@@ -957,7 +953,7 @@ const returnExpression = rule({
 // pack literal
 
 const packLiteral = rule({
-    getRule() {
+    rule() {
         return [
             assertToken(TokenType.SymbolDoubleLeftBrace),
             packLiteralItems,
@@ -981,7 +977,7 @@ const packLiteral = rule({
 });
 
 const packLiteralItems = listRule({
-    getRule() {
+    rule() {
         return [
             token(TokenType.StringLiteral, () => "Expected a string literal for key in pack literal"),
             token(TokenType.SymbolColon, () => "Expected ':' in pack literal"),
@@ -1001,7 +997,7 @@ const packLiteralItems = listRule({
 // array literal
 
 const arrayLiteral = rule({
-    getRule() {
+    rule() {
         return [
             assertToken(TokenType.SymbolLeftBracket),
             arrayLiteralItems,
@@ -1025,7 +1021,7 @@ const arrayLiteral = rule({
 });
 
 const arrayLiteralItems = listRule({
-    getRule() {
+    rule() {
         return [expression] as const;
     },
     action(result) {
@@ -1040,7 +1036,7 @@ const arrayLiteralItems = listRule({
 // literal
 
 const literal = rule({
-    getRule(parser) {
+    rule(parser) {
         if (parser.peekIf(literalTokenTypes)) {
             return [assertToken(parser.peek()!.type as (typeof literalTokenTypes)[number])] as const;
         } else {
@@ -1059,7 +1055,7 @@ const literal = rule({
 // identifier
 
 const identifier = rule({
-    getRule(parser) {
+    rule(parser) {
         if (parser.peekIf([TokenType.StringIdentifier])) {
             return [assertToken(TokenType.StringIdentifier)] as const;
         } else {
@@ -1073,7 +1069,7 @@ const identifier = rule({
 });
 
 const identifierExpression = rule({
-    getRule() {
+    rule() {
         return [identifier] as const;
     },
 
@@ -1089,7 +1085,7 @@ const identifierExpression = rule({
 // member access
 
 const accessMember = rule({
-    getRule(parser) {
+    rule(parser) {
         if (parser.peekIf([TokenType.StringIdentifier])) {
             return [assertToken(TokenType.StringIdentifier)] as const;
         } else if (parser.peekIf([TokenType.NumberLiteral])) {
@@ -1104,7 +1100,7 @@ const accessMember = rule({
 });
 
 const accessPostfix = rule({
-    getRule() {
+    rule() {
         return [
             assertToken(TokenType.SymbolDot),
             accessMember
@@ -1121,7 +1117,7 @@ const accessPostfix = rule({
 // new expression
 
 const newExpression = rule({
-    getRule() {
+    rule() {
         return [
             assertToken(TokenType.KeywordNew),
             identifier,
@@ -1154,7 +1150,7 @@ const newExpression = rule({
 // function call
 
 const callPostfix = rule({
-    getRule() {
+    rule() {
         return [argumentField] as const;
     },
     action(result): Omit<CallExpression, "callee"> {
@@ -1168,7 +1164,7 @@ const callPostfix = rule({
 // composite field related
 
 const argumentField = rule({
-    getRule() {
+    rule() {
         return [
             token(TokenType.SymbolLeftParen, () => "Expected '(' for argument field"),
             fieldItems,
@@ -1184,7 +1180,7 @@ const argumentField = rule({
 });
 
 const fieldItems = listRule({
-    getRule() {
+    rule() {
         return [
             token(TokenType.StringLiteral, () => "Expected string literal for field key"),
             token(TokenType.SymbolColon, () => "Expected ':' in field item"),
@@ -1204,7 +1200,7 @@ const fieldItems = listRule({
 });
 
 const fieldItemValue = rule({
-    getRule(parser) {
+    rule(parser) {
         if (parser.peekIf([TokenType.SymbolLeftBrace])) {
             return [
                 assertToken(TokenType.SymbolLeftBrace),

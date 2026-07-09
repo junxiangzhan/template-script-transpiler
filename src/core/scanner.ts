@@ -1,28 +1,25 @@
 import { Token } from "./token";
 import { SourceContext } from "./context";
 
-export interface PatternResult<T> {
-    matchResult?: T;
+export interface PatternResult<TokenType> {
+    matchResult?: TokenType;
     isAlive: boolean;
 }
 
-export interface Pattern<T> {
-    next(char: string): PatternResult<T>;
+export interface Pattern<TokenType> {
+    next(char: string): PatternResult<TokenType>;
 }
 
-export interface ScannerContext {
-    offset: number;
-}
+export class Scanner<TokenType> {
+    offset: number = 0;
 
-export class Scanner<T> {
-    
-    constructor(private createPattern: () => Pattern<T>) {}
+    constructor(private createPattern: () => Pattern<TokenType>) {}
 
-    next(compilerContext: SourceContext, scannerContext: ScannerContext): Token<T> | undefined {
+    next(compilerContext: SourceContext): Token<TokenType> | undefined {
         let peeked: string | undefined;
 
         while (true) {
-            let offset = scannerContext.offset;
+            let offset = this.offset;
             let chars = compilerContext.getCharStream(offset);
 
             // Skip whitespaces
@@ -37,13 +34,13 @@ export class Scanner<T> {
 
             // If we reached the end of the input, return undefined
             if (peeked === undefined) {
-                scannerContext.offset = offset; // Update the scanner context offset
+                this.offset = offset; // Update the scanner offset
                 return undefined;
             }
 
             // try to match a token
             const startOffset = offset;
-            let lastMatched: T | undefined;
+            let lastMatched: TokenType | undefined;
             let lastMatchedOffset = startOffset;
 
             const pattern = this.createPattern();
@@ -65,7 +62,7 @@ export class Scanner<T> {
 
             // if we have a match, update the scanner context and return the token
             if (lastMatched !== undefined) {
-                scannerContext.offset = lastMatchedOffset;
+                this.offset = lastMatchedOffset;
 
                 return {
                     type: lastMatched,
@@ -73,8 +70,8 @@ export class Scanner<T> {
                     length: lastMatchedOffset - startOffset
                 }
             } else {
-                scannerContext.offset = offset; // Update the scanner context offset
-                
+                this.offset = offset; // Update the scanner offset
+
                 // unexpected end of input or unexpected character
                 // this case should not happen if the patterns are correctly defined to match all possible characters
 

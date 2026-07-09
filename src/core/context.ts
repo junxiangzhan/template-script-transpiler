@@ -9,11 +9,12 @@ export interface Diagnostic {
 }
 
 export interface DiagnosticCollector {
-    warn(message: string, offset: number, length: number): void;
-    error(message: string, offset: number, length: number): void;
+    warn(message: string, offset?: number, length?: number): void;
+    error(message: string, offset?: number, length?: number): void;
 }
 
 export interface SourceContext {
+    source: string;
     getCharStream(startOffset?: number): Peekable<string>;
     getLexeme(offset: number, length: number): string;
     getLexemeBy(token: { offset: number; length: number }): string;
@@ -40,11 +41,19 @@ export class CompilerContext<T> extends SymbolTable<T> implements DiagnosticColl
         return this.getLexeme(token.offset, token.length);
     }
 
-    public warn(message: string, offset: number, length: number): void {
-        this.diagnostics.push({ type: "warning", message, offset, length });
+    public warn(message: string, offset?: number, length?: number): void {
+        this.diagnostics.push({
+            type: "warning", message, 
+            offset: offset ?? this.source.length,
+            length: length ?? 0
+        });
     }
 
-    public error(message: string, offset: number, length: number): void {
-        this.diagnostics.push({ type: "error", message, offset, length });
+    public error(message: string, offset?: number, length?: number): void {
+        this.diagnostics.push({
+            type: "error", message, 
+            offset: offset ?? this.source.length,
+            length: length ?? 0
+        });
     }
 }

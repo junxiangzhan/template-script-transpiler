@@ -1,3 +1,5 @@
+import { DiagnosticCollector, SourceContext } from "./context";
+
 export interface Token<T> {
     type: T;
     offset: number;
@@ -51,4 +53,13 @@ export class TokenMatcher<T> extends Map<T, [TokenSplitResult<T>, TokenSplitResu
 
         return TokenMatchResult.Failed;
     }
+}
+
+export interface TokenStream<TokenType> {
+    next(compilerContext: SourceContext & DiagnosticCollector): Token<TokenType> | undefined;
+}
+
+export interface PeekableTokenStream<T> {
+    peek(): Token<T> | undefined;
+    peekIf(types: readonly T[]): Token<T> | undefined;
 }

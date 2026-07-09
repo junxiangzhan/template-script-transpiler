@@ -1,24 +1,20 @@
 import { CompilerContext, DiagnosticCollector, SourceContext } from "./context";
-import { SymbolTable } from "./symbol-table";
-import { TokenMatcher, TokenMatchResult, type Token } from "./token";
-import { type TokenizerContext, Tokenizer } from "./tokenizer";
-
-
-type ParserStates<T> = readonly ParserState<T>[];
+import { PeekableTokenStream, TokenMatcher, TokenMatchResult, TokenStream, type Token } from "./token";
 
 type ParserStateValueResult<State> =
-    State extends ParserRuleState<any, infer R> ? R
-    : State extends ParserTokenState<infer TokenTypeValue, infer IsOptional>
-        ? (IsOptional extends true ? Token<TokenTypeValue> | undefined : Token<TokenTypeValue>)
-        : never;
+    State extends ParserRuleState<any, infer ReturnType> ? ReturnType
+    : State extends ParserTokenState<infer TokenTypeValue, infer IsOptional> ? (
+        IsOptional extends true ? Token<TokenTypeValue> | undefined
+        : Token<TokenTypeValue>
+    ) : never;
 
-export type ParsingRuleResult<P extends ParserStates<any>> = {
+export type ParsingRuleResult<P extends readonly ParserState<any>[]> = {
     [K in keyof P]: ParserStateValueResult<P[K]>
 };
 
-export interface ParsingRule<T, P extends ParserStates<T>, R, S> {
-    getRule(parser: PeekableTokenStream<T>): P;
-    action(result: ParsingRuleResult<P>, parser: PeekableTokenStream<T>, context: CompilerContext<S>): R;
+export interface ParsingRule<SymbolType, TokenType, ReturnType, StateSequence extends readonly ParserState<any>[]> {
+    rule(parser: PeekableTokenStream<TokenType>): StateSequence;
+    action(result: ParsingRuleResult<StateSequence>, parser: PeekableTokenStream<TokenType>, context: CompilerContext<SymbolType>): ReturnType;
 }
 
 export const enum ParserStateType {
@@ -31,61 +27,46 @@ interface ParserStateBase {
     type: ParserStateType;
 }
 
-export interface ParserTokenState<T, IsOptional extends boolean = boolean> extends ParserStateBase {
+export interface ParserTokenState<TokenType, IsOptional extends boolean = boolean> extends ParserStateBase {
     type: ParserStateType.Token;
-    tokenType: T;
-    onMissing?(parser: PeekableTokenStream<T>, context: SourceContext & DiagnosticCollector, butGot: Token<T> | undefined): IsOptional extends true ? undefined : T;
+    tokenType: TokenType;
+    onMissing?(context: SourceContext & DiagnosticCollector, butGot: Token<TokenType> | undefined): IsOptional extends true ? undefined : TokenType;
 }
 
 export type RecoveryCondition<T, R> = { peek?: readonly T[], consume?: readonly T[], action: (parser: PeekableTokenStream<T>, context: SourceContext & DiagnosticCollector) => R };
 
-export interface ParserRuleState<T, R> extends ParserStateBase {
+export interface ParserRuleState<TokenType, ReturnType> extends ParserStateBase {
     type: ParserStateType.Rule;
-    rule: ParsingRule<T, any, R, any>;
-    recoveryWhen?: RecoveryCondition<T, R>;
+    rule: ParsingRule<any, TokenType, ReturnType, any>;
+    recoveryWhen?: RecoveryCondition<TokenType, ReturnType>;
 }
 
-interface ParserActionState<T, R> extends ParserStateBase {
+interface ParserActionState<TokenType, ReturnType> extends ParserStateBase {
     type: ParserStateType.RuleAction;
-    rule: ParsingRule<T, any, R, any>;
-    recoveryWhen?: RecoveryCondition<T, R>;
+    rule: ParsingRule<any, TokenType, ReturnType, any>;
+    recoveryWhen?: RecoveryCondition<TokenType, ReturnType>;
 }
 
-type ParserState<T> = ParserTokenState<any> | ParserRuleState<T, any> | ParserActionState<T, any>;
+export type ParserState<TokenType> = ParserTokenState<any> | ParserRuleState<TokenType, any> | ParserActionState<TokenType, any>;
 
 //
 
-export class ParserContext<T, R> implements TokenizerContext<R> {
-    public offset: number = 0;
-    public rawTokenBuffer: Token<R>[] = [];
-    public tokenBuffer: Token<T>[] = [];
-}
+export class Parser<SymbolType, TokenType> implements PeekableTokenStream<TokenType> {
 
-export interface PeekableTokenStream<T> extends ParserContext<T, unknown> {
-    peek(): Token<T> | undefined;
-    peekIf(types: readonly T[]): Token<T> | undefined;
-}
+    private tokenBuffer: Token<TokenType>[] = [];
 
-export class Parser<T, R, S> extends ParserContext<T, R> implements PeekableTokenStream<T> {
+    constructor(
+        public tokenizer: TokenStream<TokenType>,
+        public tokenMatcher: TokenMatcher<TokenType>,
+        public context: CompilerContext<SymbolType>
+    ) { }
 
-    public tokenizer: Tokenizer<T, R>;
-    public context: CompilerContext<S>;
-
-    public tokenMatcher: TokenMatcher<T> = new TokenMatcher<T>();
-
-    constructor(tokenizer: Tokenizer<T, R>, tokenMatcher: TokenMatcher<T>, context: CompilerContext<S>) {
-        super();
-        this.tokenizer = tokenizer;
-        this.tokenMatcher = tokenMatcher;
-        this.context = context;
-    }
-
-    public peek(): Token<T> | undefined {
+    public peek(): Token<TokenType> | undefined {
         if (this.tokenBuffer.length > 0) {
             return this.tokenBuffer[this.tokenBuffer.length - 1];
         }
 
-        const token = this.tokenizer.next(this.context, this);
+        const token = this.tokenizer.next(this.context);
 
         if (token)
             this.tokenBuffer.push(token);
@@ -93,7 +74,7 @@ export class Parser<T, R, S> extends ParserContext<T, R> implements PeekableToke
         return token;
     }
 
-    public peekIf(types: readonly T[]): Token<T> | undefined {
+    public peekIf(types: readonly TokenType[]): Token<TokenType> | undefined {
         const token = this.peek();
 
         if (!token)
@@ -111,13 +92,13 @@ export class Parser<T, R, S> extends ParserContext<T, R> implements PeekableToke
         }
     }
 
-    private consumeToken(): Token<T> | undefined {
+    private consumeToken(): Token<TokenType> | undefined {
         const token = this.peek();
         if (token)
             return this.tokenBuffer.pop();
     }
 
-    private consumeTokenIf(types: readonly T[]): Token<T> | undefined {
+    private consumeTokenIf(types: readonly TokenType[]): Token<TokenType> | undefined {
         const token = this.peek();
 
         if (!token)
@@ -139,11 +120,11 @@ export class Parser<T, R, S> extends ParserContext<T, R> implements PeekableToke
         }
     }
 
-    private consumeTokenUntil(whenConsume: readonly T[], whenPeek: readonly T[]): Token<T>[] {
+    private consumeTokenUntil(whenConsume: readonly TokenType[], whenPeek: readonly TokenType[]): Token<TokenType>[] {
         if (whenConsume.length === 0 && whenPeek.length === 0)
             return [];
 
-        const tokens: Token<T>[] = [];
+        const tokens: Token<TokenType>[] = [];
 
         while (true) {
             const token = this.peek();
@@ -182,7 +163,7 @@ export class Parser<T, R, S> extends ParserContext<T, R> implements PeekableToke
                 const splitResult = this.tokenMatcher.get(token.type)!;
                 const firstSplitToken = { ...splitResult[0], offset: token.offset };
                 const secondSplitToken = { ...splitResult[1], offset: token.offset + splitResult[0].length };
-                
+
                 this.tokenBuffer.splice(
                     this.tokenBuffer.length - 1, 1, // Replace the current token with the second split token
                     secondSplitToken,
@@ -191,58 +172,58 @@ export class Parser<T, R, S> extends ParserContext<T, R> implements PeekableToke
             }
 
             tokens.push(this.consumeToken()!);
-            
+
             if (returnAfterConsume) {
                 return tokens;
             }
         }
     }
 
-    public parse<P extends ParserStates<T>, R>(startRule: ParsingRule<T, P, R, S>): R {
-        
+    public parse<StateSequence extends readonly ParserState<TokenType>[], ReturnType>(startRule: ParsingRule<SymbolType, TokenType, ReturnType, StateSequence>): ReturnType {
+
         const resultStacks: any[][] = [];
         let currentResults = [];
 
-        const stateStack: ParserState<T>[] = [{ type: ParserStateType.Rule, rule: startRule }];
+        const stateStack: ParserState<TokenType>[] = [{ type: ParserStateType.Rule, rule: startRule }];
 
         while (stateStack.length > 0) {
             const currentState = stateStack.pop()!;
 
             try {
                 switch (currentState.type) {
-                case ParserStateType.Token:
-                    const token = this.parseToken(currentState);
-                    currentResults.push(token);
-                    break;
-                case ParserStateType.Rule:
-                    const states = currentState.rule.getRule(this);
-                    
-                    resultStacks.push(currentResults);
-                    currentResults = [];
-                    
-                    // Push a RuleAction state to handle the action after the rule states are processed
-                    stateStack.push({ 
-                        type: ParserStateType.RuleAction,
-                        rule: currentState.rule,
-                        recoveryWhen: currentState.recoveryWhen
-                    });
+                    case ParserStateType.Token:
+                        const token = this.parseToken(currentState);
+                        currentResults.push(token);
+                        break;
+                    case ParserStateType.Rule:
+                        const states = currentState.rule.rule(this);
 
-                    // Push the states in reverse order so that they are processed in the correct order
-                    for (let i = states.length - 1; i >= 0; i--)
-                        stateStack.push(states[i]);
-                    break;
-                case ParserStateType.RuleAction:
-                    const previousResult = resultStacks.pop()!;
-                    const actionResult = currentState.rule.action(currentResults as any[], this, this.context);
-                    currentResults = previousResult;
-                    currentResults.push(actionResult);
-                    break;
-                }   
+                        resultStacks.push(currentResults);
+                        currentResults = [];
+
+                        // Push a RuleAction state to handle the action after the rule states are processed
+                        stateStack.push({
+                            type: ParserStateType.RuleAction,
+                            rule: currentState.rule,
+                            recoveryWhen: currentState.recoveryWhen
+                        });
+
+                        // Push the states in reverse order so that they are processed in the correct order
+                        for (let i = states.length - 1; i >= 0; i--)
+                            stateStack.push(states[i]);
+                        break;
+                    case ParserStateType.RuleAction:
+                        const previousResult = resultStacks.pop()!;
+                        const actionResult = currentState.rule.action(currentResults as any[], this, this.context);
+                        currentResults = previousResult;
+                        currentResults.push(actionResult);
+                        break;
+                }
             } catch (error) {
                 if (!(error instanceof ParserPanicError))
                     throw error;
 
-                let recoveryState: ParserActionState<T, any> | undefined;
+                let recoveryState: ParserActionState<TokenType, any> | undefined;
 
                 while (stateStack.length > 0 && !recoveryState) {
                     const currentState = stateStack.pop()!;
@@ -256,13 +237,13 @@ export class Parser<T, R, S> extends ParserContext<T, R> implements PeekableToke
                     // Check if this state has a recovery condition
                     if (!currentState.recoveryWhen)
                         continue;
-                    
+
                     recoveryState = currentState;
                 }
 
                 if (!recoveryState)
                     throw error; // No recovery state found, rethrow the error
-                
+
                 const { peek, consume, action } = recoveryState.recoveryWhen!;
 
                 this.consumeTokenUntil(consume ?? [], peek ?? []);
@@ -279,7 +260,7 @@ export class Parser<T, R, S> extends ParserContext<T, R> implements PeekableToke
         return currentResults[0];
     }
 
-    private parseToken(state: ParserTokenState<T>): Token<T> | undefined {
+    private parseToken(state: ParserTokenState<TokenType>): Token<TokenType> | undefined {
         const token = this.consumeTokenIf([state.tokenType]);
 
         if (token)
@@ -287,12 +268,12 @@ export class Parser<T, R, S> extends ParserContext<T, R> implements PeekableToke
 
         const butGot = this.peek();
         if (state.onMissing) {
-            const missingTokenType = state.onMissing(this, this.context, butGot);
+            const missingTokenType = state.onMissing(this.context, butGot);
 
             if (missingTokenType !== undefined) {
-                return { 
-                    type: missingTokenType, 
-                    offset: butGot?.offset ?? this.offset,
+                return {
+                    type: missingTokenType,
+                    offset: butGot?.offset ?? this.context.source.length,
                     length: butGot?.length ?? 0,
                     isMissing: true
                 };
@@ -305,11 +286,7 @@ export class Parser<T, R, S> extends ParserContext<T, R> implements PeekableToke
         // If we reach here, it means the token was not found and there is no onMissing handler, so we throw an error
         const errorMessage = `Expected token of type ${state.tokenType} but got ${butGot ? butGot.type : "end of input"}`;
 
-        this.context.error(
-            errorMessage,
-            butGot?.offset ?? this.offset,
-            butGot?.length ?? 0
-        );
+        this.context.error(errorMessage, butGot?.offset, butGot?.length);
 
         throw new ParserPanicError(`[BUG] Parser encountered an unexpected token. ${errorMessage}`);
     }

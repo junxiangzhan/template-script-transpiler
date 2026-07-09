@@ -1,105 +1,17 @@
+
+import type { CompilerContext, SourceContext } from "./core/context";
+import type { Token } from "./core/token";
+import { Emitter } from "./core/emitter";
+
+import { BuiltInSymbol, SymbolType } from "./symbols";
+import { Identifier, TokenType } from "./tokens";
 import { NodeType } from "./parsing-tree";
 import type { AccessExpression, IdentifierExpression, ParsingNode } from "./parsing-tree";
-import type { CompilerContext, SourceContext } from "./core/context";
-import { zip } from "./utils/iterables";
-import { Identifier, TokenType } from "./tokens";
-import { Token } from "./core/token";
+
 import { singleQuoteToDoubleQuote, parseDateTime, parseDuration } from "./utils/literals";
-import { BuiltInSymbol, SymbolType } from "./symbols";
-import { SymbolTable } from "./core/symbol-table";
+import { zip } from "./utils/iterables";
 
-const enum EmitterStateType {
-    Node,
-    Action
-}
-
-interface EmitterStateBase {
-    type: EmitterStateType;
-}
-
-interface EmitterNodeState extends EmitterStateBase {
-    type: EmitterStateType.Node;
-    node: ParsingNode | undefined;
-}
-
-interface EmitterActionState extends EmitterStateBase {
-    type: EmitterStateType.Action;
-    node: ParsingNode;
-}
-
-type EmitterState = EmitterNodeState | EmitterActionState;
-
-type EmitResult<T extends (ParsingNode | undefined)[]> = { [K in keyof T]: T[K] extends ParsingNode ? string : undefined; }
-
-type NodeEmitter<T extends NodeType, P extends (ParsingNode | undefined)[]> = {
-    getChildren: (node: ParsingNode & { type: T }) => P;
-    emit: (context: CompilerContext<BuiltInSymbol>, node: ParsingNode & { type: T }, childrenResults: EmitResult<P>) => string;
-};
-
-const nodeProcessors: Map<NodeType, NodeEmitter<any, any>> = new Map();
-
-export function emit(context: CompilerContext<BuiltInSymbol>, node: ParsingNode): string {
-
-    const stateStack: EmitterState[] = [{ type: EmitterStateType.Node, node }];
-    const resultStack: (string | undefined)[][] = [];
-    let currentResult: (string | undefined)[] = [];
-
-    while (stateStack.length > 0) {
-        const state = stateStack.pop()!;
-        const node = state.node;
-
-        if (node === undefined) {
-            // undefined only be produced by getChildren()
-            // we just need to push undefined to currentResult and continue
-            currentResult.push(undefined);
-            continue;
-        }
-
-        const nodeProcessor = nodeProcessors.get(node.type);
-
-        if (!nodeProcessor)
-            throw new Error(`[BUG] No processor found for node type: ${node.type}`);
-
-        switch (state.type) {
-            case EmitterStateType.Node:
-
-                stateStack.push({ type: EmitterStateType.Action, node });
-
-                const children = nodeProcessor.getChildren(node);
-                for (let i = children.length - 1; i >= 0; i--) {
-                    stateStack.push({
-                        type: EmitterStateType.Node,
-                        node: children[i]
-                    });
-                }
-
-                resultStack.push(currentResult);
-                currentResult = [];
-
-                break;
-            case EmitterStateType.Action:
-                const actionResult = nodeProcessor.emit(context, node, currentResult);
-                currentResult = resultStack.pop()!;
-                currentResult.push(actionResult);
-                break;
-
-        }
-    }
-
-    if (currentResult.length !== 1)
-        throw new Error(`[BUG] Emitter finished with unexpected result stack length: ${currentResult.length}`);
-
-    if (currentResult[0] === undefined)
-        throw new Error(`[BUG] Emitter finished with undefined result`);
-
-    return currentResult[0];
-}
-
-//
-
-function processNode<U extends NodeType, T extends (ParsingNode | undefined)[]>(nodeType: U, emitter: NodeEmitter<U, T>) {
-    nodeProcessors.set(nodeType, emitter);
-}
+export const emitter = new Emitter<BuiltInSymbol, NodeType, ParsingNode>();
 
 // utilities
 
@@ -124,9 +36,9 @@ function getIdentifierString(context: SourceContext, token: Token<Identifier | T
 
 function isAccessExpressionWithIdentifierTarget(node: ParsingNode) {
     let currentNode: ParsingNode = node;
-    while (currentNode.type === NodeType.AccessExpression) {
+
+    while (currentNode.type === NodeType.AccessExpression)
         currentNode = currentNode.target;
-    }
 
     return currentNode.type === NodeType.IdentifierExpression;
 }
@@ -156,8 +68,8 @@ function getIdentifierAccessPathString(context: SourceContext, accessExpression:
 
 //
 
-processNode(NodeType.Program, {
-    getChildren(node) {
+emitter.process(NodeType.Program, {
+    children(node) {
         return node.declarations;
     },
     emit(_context, _node, childrenResults) {
@@ -165,8 +77,8 @@ processNode(NodeType.Program, {
     }
 });
 
-processNode(NodeType.TemplateDeclaration, {
-    getChildren(node) {
+emitter.process(NodeType.TemplateDeclaration, {
+    children(node) {
         return [node.parameters, node.body] as const;
     },
     emit(context, node, [parametersResult, bodyResult]) {
@@ -175,8 +87,8 @@ processNode(NodeType.TemplateDeclaration, {
     }
 });
 
-processNode(NodeType.FunctionDeclaration, {
-    getChildren(node) {
+emitter.process(NodeType.FunctionDeclaration, {
+    children(node) {
         return [node.parameters, node.body] as const;
     },
     emit(context, node, [parametersResult, bodyResult]) {
@@ -187,8 +99,8 @@ processNode(NodeType.FunctionDeclaration, {
 
 // flow controls
 
-processNode(NodeType.DoExpression, {
-    getChildren(node) {
+emitter.process(NodeType.DoExpression, {
+    children(node) {
         return node.body;
     },
     emit(_context, _node, childrenResults) {
@@ -196,8 +108,8 @@ processNode(NodeType.DoExpression, {
     }
 });
 
-processNode(NodeType.IfExpression, {
-    getChildren(node) {
+emitter.process(NodeType.IfExpression, {
+    children(node) {
         return [node.condition, node.consequent, node.alternate]
     },
     emit(_context, _node, [conditionResult, consequentResult, alternateResult]) {
@@ -218,8 +130,8 @@ processNode(NodeType.IfExpression, {
     }
 });
 
-processNode(NodeType.ForExpression, {
-    getChildren(node) {
+emitter.process(NodeType.ForExpression, {
+    children(node) {
         return [node.body, ...node.iterables] as const;
     },
     emit(context, node, [bodyResult, ...iterablesResults]) {
@@ -239,8 +151,8 @@ processNode(NodeType.ForExpression, {
     }
 });
 
-processNode(NodeType.WhileExpression, {
-    getChildren(node) {
+emitter.process(NodeType.WhileExpression, {
+    children(node) {
         return [node.condition, node.body] as const;
     },
     emit(_context, _node, [conditionResult, bodyResult]) {
@@ -248,8 +160,8 @@ processNode(NodeType.WhileExpression, {
     }
 });
 
-processNode(NodeType.ReturnExpression, {
-    getChildren(node) {
+emitter.process(NodeType.ReturnExpression, {
+    children(node) {
         return [node.value] as const;
     },
     emit(_context, _node, [valueResult]) {
@@ -259,8 +171,8 @@ processNode(NodeType.ReturnExpression, {
 
 // operations
 
-processNode(NodeType.AssignmentExpression, {
-    getChildren(node) {
+emitter.process(NodeType.AssignmentExpression, {
+    children(node) {
         const expression = node.left;
         if (expression.type === NodeType.IdentifierExpression)
             return [undefined, node.right] as const;
@@ -316,8 +228,8 @@ function emitIdentifierAssignment(context: CompilerContext<BuiltInSymbol>, node:
     }
 }
 
-processNode(NodeType.UnaryExpression, {
-    getChildren(node) {
+emitter.process(NodeType.UnaryExpression, {
+    children(node) {
         return [node.operand] as const;
     },
 
@@ -344,8 +256,8 @@ processNode(NodeType.UnaryExpression, {
     }
 });
 
-processNode(NodeType.NAryExpression, {
-    getChildren(node) {
+emitter.process(NodeType.NAryExpression, {
+    children(node) {
         return node.operands;
     },
 
@@ -399,8 +311,8 @@ processNode(NodeType.NAryExpression, {
 
 // access
 
-processNode(NodeType.AccessExpression, {
-    getChildren(node) {
+emitter.process(NodeType.AccessExpression, {
+    children(node) {
         if (isAccessExpressionWithIdentifierTarget(node)) {
             return [undefined] as const;
         }
@@ -437,8 +349,8 @@ processNode(NodeType.AccessExpression, {
 
 // literals
 
-processNode(NodeType.LiteralExpression, {
-    getChildren() {
+emitter.process(NodeType.LiteralExpression, {
+    children() {
         return [];
     },
     emit(context, node) {
@@ -488,8 +400,8 @@ processNode(NodeType.LiteralExpression, {
     }
 });
 
-processNode(NodeType.PackExpression, {
-    getChildren(node) {
+emitter.process(NodeType.PackExpression, {
+    children(node) {
         return node.members.map(([_key, value]) => value);
     },
     emit(context, node, childrenResults) {
@@ -504,8 +416,8 @@ processNode(NodeType.PackExpression, {
     }
 });
 
-processNode(NodeType.ArrayExpression, {
-    getChildren(node) {
+emitter.process(NodeType.ArrayExpression, {
+    children(node) {
         return node.elements;
     },
     emit(_context, _node, childrenResults) {
@@ -513,8 +425,8 @@ processNode(NodeType.ArrayExpression, {
     }
 });
 
-processNode(NodeType.IdentifierExpression, {
-    getChildren() {
+emitter.process(NodeType.IdentifierExpression, {
+    children() {
         return [];
     },
     emit(context, node) {
@@ -539,8 +451,8 @@ processNode(NodeType.IdentifierExpression, {
     }
 });
 
-processNode(NodeType.CallExpression, {
-    getChildren(node) {
+emitter.process(NodeType.CallExpression, {
+    children(node) {
         return [node.arguments] as const;
     },
     emit(context, node, [argumentsResult]) {
@@ -578,8 +490,8 @@ processNode(NodeType.CallExpression, {
     }
 });
 
-processNode(NodeType.NewExpression, {
-    getChildren(node) {
+emitter.process(NodeType.NewExpression, {
+    children(node) {
         return [node.arguments] as const;
     },
     emit(context, node, [argumentsResult]) {
@@ -615,8 +527,8 @@ processNode(NodeType.NewExpression, {
 
 // others
 
-processNode(NodeType.ParameterDeclaration, {
-    getChildren(node) {
+emitter.process(NodeType.ParameterDeclaration, {
+    children(node) {
         return node.items.map(([_identifier, defaultValue]) => defaultValue);
     },
     emit(context, node, childrenResults) {
@@ -633,8 +545,8 @@ processNode(NodeType.ParameterDeclaration, {
     }
 });
 
-processNode(NodeType.CompositeField, {
-    getChildren(node) {
+emitter.process(NodeType.CompositeField, {
+    children(node) {
         return node.members.map(([_, value]) => value);
     },
     emit(context, node, childrenResults) {

@@ -10,7 +10,7 @@ class ArrayTokenizer extends Tokenizer<string, string> {
     private index = 0;
 
     constructor(tokens: Token<string>[]) {
-        super((t) => t, [], () => ({ next: () => ({ isAlive: false }) }));
+        super((t) => t, [], null as any);
         this.tokens = tokens;
     }
 
@@ -34,17 +34,17 @@ describe("Parser engine", () => {
         const matcher = new TokenMatcher<string>();
         const context = new CompilerContext<string>("foo = 42");
 
-        const parser = new Parser<string, string, string>(tokenizer, matcher, context);
+        const parser = new Parser<string, string>(tokenizer, matcher, context);
 
-        const assignmentRule: ParsingRule<string, any, any, string> = {
-            getRule() {
+        const assignmentRule: ParsingRule<string, string, any, any> = {
+            rule() {
                 return [
                     { type: ParserStateType.Token, tokenType: "ID" },
                     { type: ParserStateType.Token, tokenType: "ASSIGN" },
                     { type: ParserStateType.Token, tokenType: "NUM" }
                 ] as const;
             },
-            action(result: ParsingRuleResult<any>) {
+            action(result: any) {
                 return {
                     type: "Assignment",
                     left: result[0],
@@ -61,3 +61,4 @@ describe("Parser engine", () => {
         });
     });
 });
+

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { zip, zipLongest } from "./iterables";
+import { zip, zipLongest, enumerate } from "./iterables";
 
 describe("iterables utility", () => {
     it("zips arrays to the length of the shortest array", () => {
@@ -20,6 +20,16 @@ describe("iterables utility", () => {
             [1, "a"],
             [2, "b"],
             [3, undefined]
+        ]);
+    });
+
+    it("enumerates an iterable with index", () => {
+        const items = ["a", "b", "c"];
+        const result = Array.from(enumerate(items));
+        expect(result).toEqual([
+            [0, "a"],
+            [1, "b"],
+            [2, "c"]
         ]);
     });
 });

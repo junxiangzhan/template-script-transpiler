@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { Tokenizer } from "./tokenizer";
-import { Pattern, PatternResult } from "./scanner";
+import { Scanner, Pattern, PatternResult } from "./scanner";
 import { CompilerContext } from "./context";
 import { Token } from "./token";
 
@@ -26,19 +26,16 @@ describe("Tokenizer", () => {
             };
         };
 
-        const tokenizer = new Tokenizer<string, string>(
-            refine,
-            skip,
-            () => new MockPattern()
-        );
+        const scanner = new Scanner<string>(() => new MockPattern());
+        const tokenizer = new Tokenizer<string, string>(refine, skip, scanner);
 
         const context = new CompilerContext("a b");
-        const tokenizerContext = { offset: 0, rawTokenBuffer: [] };
 
-        const t1 = tokenizer.next(context, tokenizerContext);
+        const t1 = tokenizer.next(context);
         expect(t1).toEqual({ type: "A", offset: 0, length: 1 });
 
-        const t2 = tokenizer.next(context, tokenizerContext);
+        const t2 = tokenizer.next(context);
         expect(t2).toEqual({ type: "B", offset: 2, length: 1 });
     });
 });
+

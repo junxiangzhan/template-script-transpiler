@@ -22,3 +22,11 @@ export function* zipLongest<T extends readonly unknown[][]>(...arrays: T): Itera
         yield arrays.map(arr => arr[i]) as ZippedLongest<T>[number];
     }
 }
+
+export function* enumerate<T>(iterable: Iterable<T>): Iterable<[number, T]> {
+    let index = 0;
+
+    for (const item of iterable) {
+        yield [index++, item];
+    }
+}

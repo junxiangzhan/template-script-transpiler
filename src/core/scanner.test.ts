@@ -15,23 +15,22 @@ describe("Scanner", () => {
     it("scans source using custom patterns", () => {
         const scanner = new Scanner<string>(() => new MockCharPattern());
         const context = new CompilerContext("  a  ");
-        const scannerContext = { offset: 0 };
 
-        const token = scanner.next(context, scannerContext);
+        const token = scanner.next(context);
         expect(token).toEqual({
             type: "A_TOKEN",
             offset: 2,
             length: 1
         });
-        expect(scannerContext.offset).toBe(3);
+
+        expect(scanner.offset).toBe(3);
     });
 
     it("returns undefined at the end of input", () => {
         const scanner = new Scanner<string>(() => new MockCharPattern());
         const context = new CompilerContext("   ");
-        const scannerContext = { offset: 0 };
 
-        const token = scanner.next(context, scannerContext);
+        const token = scanner.next(context);
         expect(token).toBeUndefined();
     });
 });
