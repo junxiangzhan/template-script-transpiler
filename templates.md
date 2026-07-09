@@ -21,7 +21,7 @@
 - 會計科目：利用表單功能取得，或透過 `$query-account` 查詢
 - 標籤：利用表單功能取得，或透過 `$query-tag` 查詢
 - 表單欄位：使用 `$col` 運算建立
-- 推薦選項：使用 `$col-suggest-option` 運算建立
+- 推薦選項：使用 `$suggest-option` 運算建立
 - 分錄行：使用 `$entry-line` 運算建立
 
 若嘗試取得非上列的型別或物件（如特定的方法函數），將會被替換為 `undefined`。
