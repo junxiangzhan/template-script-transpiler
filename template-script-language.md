@@ -679,8 +679,8 @@ slice("array": myArray, "from": 1, "to": 5, "step": 2)
 
 ```
 form("title": "記帳", "columns": [
-  ColAmount='金額' { "default": 100 },
-  ColAccount='科目'
+  ColAmount { "default": 100 },
+  ColAccount
 ])
 ```
 
