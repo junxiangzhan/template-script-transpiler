@@ -150,7 +150,7 @@ export class WordPattern implements Pattern<RawTokenType> {
     }
 }
 
-const regexTimeStampContinue = /[_\-:\p{Alphabetic}\d.]/u;
+const regexTimeStampContinue = /[_\-:\p{Alphabetic}\d]/u;
 
 export const enum TimeOrAmountLikePatternState {
     ForFirstChar,
