@@ -1,10 +1,11 @@
-import { ParserStateType, ParserPanicError } from "./core/parser";
 import type { ParserTokenState, ParserRuleState, ParsingRule, RecoveryCondition, ParserState } from "./core/parser";
 import type { Token, PeekableTokenStream } from "./core/token";
 
+import { ParserStateType, ParserPanicError } from "./core/parser";
+
+import { BuiltInSymbol } from "./symbols";
 import { TokenType } from "./tokens";
 import { NodeType } from "./parsing-tree";
-import { BuiltInSymbol } from "./symbols";
 
 import {
     infixOperatorTokenTypes,
@@ -13,6 +14,8 @@ import {
     literalTokenTypes,
     expressionFirstTokenTypes
 } from "./tokens";
+
+import { enumerate } from "./utils/iterables";
 
 import type {
     Program,
@@ -54,7 +57,7 @@ export function assertToken<T extends TokenType>(tokenType: T): ParserTokenState
     return {
         type: ParserStateType.Token,
         tokenType,
-    }
+    } satisfies ParserTokenState<T, false>;
 }
 
 export function optionalToken<T extends TokenType>(tokenType: T): ParserTokenState<T, true> {
@@ -62,7 +65,7 @@ export function optionalToken<T extends TokenType>(tokenType: T): ParserTokenSta
         type: ParserStateType.Token,
         tokenType,
         onMissing: () => undefined
-    };
+    } satisfies ParserTokenState<T, true>;
 }
 
 export function rule<StateSequence extends readonly ParserState<TokenType>[], ReturnType>(parsingRule: ParsingRule<BuiltInSymbol, TokenType, ReturnType, StateSequence>, recoveryWhen?: RecoveryCondition<TokenType, ReturnType> | { action: undefined }): ParserRuleState<TokenType, ReturnType> {
@@ -70,7 +73,7 @@ export function rule<StateSequence extends readonly ParserState<TokenType>[], Re
         type: ParserStateType.Rule,
         rule: parsingRule,
         recoveryWhen: recoveryWhen?.action && recoveryWhen
-    };
+    } satisfies ParserRuleState<TokenType, ReturnType>;
 }
 
 // parser state utilities
@@ -387,7 +390,7 @@ function isRightAssociative(tokenType: TokenType): boolean {
 
 function parseExpression(nodes: (Expression | Token<TokenType>)[]): Expression {
     if (nodes.length === 0) {
-        throw new Error("[BUG] Empty nodes in parseShuntingYard");
+        throw new Error("[BUG] Empty nodes in parseExpression");
     }
 
     const operands: Expression[] = [];
@@ -398,35 +401,36 @@ function parseExpression(nodes: (Expression | Token<TokenType>)[]): Expression {
         const right = operands.pop()!;
         const left = operands.pop()!;
 
-        if (opToken.type === TokenType.OperatorAssign) {
-            const combined: Expression = {
-                type: NodeType.AssignmentExpression,
-                left,
-                right
-            } satisfies AssignmentExpression as any;
-            operands.push(combined);
-        } else {
-            // Flatten identical consecutive left-associative operators
-            if (
-                left.type === NodeType.NAryExpression &&
-                (left as NAryExpression).operator.type === opToken.type
-            ) {
-                (left as NAryExpression).operands.push(right);
-                operands.push(left);
-            } else {
+        switch (opToken.type) {
+            case TokenType.OperatorAssign:
                 const combined: Expression = {
-                    type: NodeType.NAryExpression,
-                    operator: opToken as any,
-                    operands: [left, right]
-                } satisfies NAryExpression;
+                    type: NodeType.AssignmentExpression,
+                    left,
+                    right
+                } satisfies AssignmentExpression as any;
                 operands.push(combined);
-            }
+                break;
+            default:
+                if (
+                    left.type === NodeType.NAryExpression &&
+                    (left as NAryExpression).operator.type === opToken.type
+                ) {
+                    (left as NAryExpression).operands.push(right);
+                    operands.push(left);
+                } else {
+                    const combined: Expression = {
+                        type: NodeType.NAryExpression,
+                        operator: opToken as any,
+                        operands: [left, right]
+                    } satisfies NAryExpression;
+                    operands.push(combined);
+                }
+                break;
         }
     }
 
-    for (let i = 0; i < nodes.length; i++) {
-        const node = nodes[i];
-        if (i % 2 === 0) {
+    for (const [index, node] of enumerate(nodes)) {
+        if (index % 2 === 0) {
             operands.push(node as Expression);
         } else {
             const opToken = node as Token<TokenType>;
@@ -545,7 +549,7 @@ const expressionPrimary = rule({
         );
         throw new ParserPanicError(errorMessage);
     },
-    action(result: any): Expression {
+    action(result: [Expression, (Omit<CallExpression, "callee"> | Omit<AccessExpression, "target">)[]]): Expression {
         const primaryExpression: Expression = result[0];
         const postfixes: (Omit<CallExpression, "callee"> | Omit<AccessExpression, "target">)[] = result[1] ?? [];
 
@@ -578,7 +582,7 @@ const unaryOperation = rule({
 
         throw new Error("[BUG]");
     },
-    action(result: any): UnaryExpression {
+    action(result): UnaryExpression {
         const [operatorToken, operandExpression] = result;
 
         return {
@@ -607,7 +611,7 @@ const postfixOperations = rule({
             return [];
         } else {
             const [item, rest] = result;
-            return [item, ...(rest as (typeof item)[])] as (typeof item)[];
+            return [item, ...(rest as (typeof item)[])] as (Omit<AccessExpression, "target"> | Omit<CallExpression, "callee">)[];
         }
     }
 });

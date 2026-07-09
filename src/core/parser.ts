@@ -181,8 +181,7 @@ export class Parser<SymbolType, TokenType> implements PeekableTokenStream<TokenT
 
     public parse<StateSequence extends readonly ParserState<TokenType>[], ReturnType>(startRule: ParsingRule<SymbolType, TokenType, ReturnType, StateSequence>): ReturnType {
 
-        const resultStacks: any[][] = [];
-        let currentResults = [];
+        const resultStacks: any[][] = [[]];
 
         const stateStack: ParserState<TokenType>[] = [{ type: ParserStateType.Rule, rule: startRule }];
 
@@ -193,13 +192,12 @@ export class Parser<SymbolType, TokenType> implements PeekableTokenStream<TokenT
                 switch (currentState.type) {
                     case ParserStateType.Token:
                         const token = this.parseToken(currentState);
-                        currentResults.push(token);
+                        resultStacks.at(-1)!.push(token);
                         break;
                     case ParserStateType.Rule:
                         const states = currentState.rule.rule(this);
 
-                        resultStacks.push(currentResults);
-                        currentResults = [];
+                        resultStacks.push([]); // Push a new result stack for this rule
 
                         // Push a RuleAction state to handle the action after the rule states are processed
                         stateStack.push({
@@ -213,10 +211,9 @@ export class Parser<SymbolType, TokenType> implements PeekableTokenStream<TokenT
                             stateStack.push(states[i]);
                         break;
                     case ParserStateType.RuleAction:
-                        const previousResult = resultStacks.pop()!;
-                        const actionResult = currentState.rule.action(currentResults as any[], this, this.context);
-                        currentResults = previousResult;
-                        currentResults.push(actionResult);
+                        const lastResults = resultStacks.pop()!;
+                        const actionResult = currentState.rule.action(lastResults as any[], this, this.context);
+                        resultStacks.at(-1)!.push(actionResult);
                         break;
                 }
             } catch (error) {
@@ -232,7 +229,7 @@ export class Parser<SymbolType, TokenType> implements PeekableTokenStream<TokenT
                         continue;
 
                     // Discard the current result stack since we are recovering
-                    currentResults = resultStacks.pop()!;
+                    resultStacks.pop();
 
                     // Check if this state has a recovery condition
                     if (!currentState.recoveryWhen)
@@ -249,15 +246,15 @@ export class Parser<SymbolType, TokenType> implements PeekableTokenStream<TokenT
                 this.consumeTokenUntil(consume ?? [], peek ?? []);
 
                 const recoveryResult = action(this, this.context);
-                currentResults.push(recoveryResult); // push the recovery result as this rule's result
+                resultStacks.at(-1)!.push(recoveryResult); // push the recovery result as this rule's result
             }
         }
 
-        if (currentResults.length !== 1) {
-            throw new Error(`[BUG] Parsing did not result in a single root node. Result stack: ${JSON.stringify(currentResults)}`);
-        }
+        const lastResultStack = resultStacks.at(0);
+        if (lastResultStack?.length !== 1)
+            throw new Error(`[BUG] Parsing did not result in a single root node.`);
 
-        return currentResults[0];
+        return lastResultStack[0];
     }
 
     private parseToken(state: ParserTokenState<TokenType>): Token<TokenType> | undefined {

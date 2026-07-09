@@ -1,6 +1,5 @@
 import type { SourceContext, DiagnosticCollector } from "./context";
 import type { Token, TokenStream } from "./token";
-import type { Scanner } from "./scanner";
 
 export type TokenRefiner<T, R> = (rawToken: Token<R>, context: SourceContext & DiagnosticCollector, rawTokenBuffer: Token<R>[]) => Token<T> | undefined;
 
@@ -11,7 +10,7 @@ export class Tokenizer<TokenType, RawTokenType> implements TokenStream<TokenType
     constructor(
         private refineToken: TokenRefiner<TokenType, RawTokenType>,
         private skipTokenTypes: readonly RawTokenType[],
-        private scanner: Scanner<RawTokenType>
+        private scanner: TokenStream<RawTokenType>
     ) { }
 
     next(compilerContext: SourceContext & DiagnosticCollector): Token<TokenType> | undefined {
