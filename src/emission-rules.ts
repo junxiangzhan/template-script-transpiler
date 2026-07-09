@@ -43,7 +43,7 @@ function isAccessExpressionWithIdentifierTarget(node: ParsingNode) {
     return currentNode.type === NodeType.IdentifierExpression;
 }
 
-function getIdentifierAccessPathString(context: SourceContext, accessExpression: AccessExpression | IdentifierExpression): [string, IdentifierExpression] {
+function getAccessPathAndTarget(context: SourceContext, accessExpression: AccessExpression | IdentifierExpression): [string, IdentifierExpression] {
     let currentNode: ParsingNode = accessExpression;
     const pathSegments: string[] = [];
 
@@ -205,7 +205,7 @@ emitter.process(NodeType.AssignmentExpression, {
 });
 
 function emitIdentifierAssignment(context: CompilerContext<BuiltInSymbol>, node: IdentifierExpression | AccessExpression, valueResult: string): string {
-    const [targetString, identifier] = getIdentifierAccessPathString(context, node);
+    const [targetString, identifier] = getAccessPathAndTarget(context, node);
     
     const identifierLexeme = getIdentifierString(context, identifier.value);
     const symbol = context.getSymbol(JSON.parse(identifierLexeme) as string);
@@ -325,7 +325,7 @@ emitter.process(NodeType.AccessExpression, {
             return `{ "$": "get-prop", "target": ${targetResult}, "prop": ${getIdentifierString(context, node.member)} }`;
         } 
 
-        const [targetString, identifier] = getIdentifierAccessPathString(context, node);
+        const [targetString, identifier] = getAccessPathAndTarget(context, node);
 
         const identifierLexeme = getIdentifierString(context, identifier.value);
         const symbol = context.getSymbol(JSON.parse(identifierLexeme) as string);
