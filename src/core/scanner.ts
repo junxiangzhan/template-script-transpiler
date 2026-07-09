@@ -48,7 +48,7 @@ export class Scanner<TokenType> {
             while (peeked = chars.peek()) {
                 const result = pattern.next(peeked);
 
-                if (!result.isAlive)
+                if (!result.isAlive && result.matchResult === undefined)
                     break;
 
                 chars.next();
@@ -58,6 +58,9 @@ export class Scanner<TokenType> {
                     lastMatched = result.matchResult;
                     lastMatchedOffset = offset;
                 }
+
+                if (!result.isAlive)
+                    break;
             }
 
             // if we have a match, update the scanner context and return the token
