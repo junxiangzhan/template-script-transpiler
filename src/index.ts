@@ -6,8 +6,8 @@ import { Parser } from "./core/parser";
 import { BuiltInSymbol, setDefaultSymbol } from "./symbols";
 import { refineToken, skipTokenTypes, tokenMatcher } from "./tokens";
 import { DispatchPattern } from "./patterns";
-import { program } from "./rules";
-import { emitter } from "./emitter";
+import { program } from "./parsing-rules";
+import { emitter } from "./emission-rules";
 
 export function compile(source: string) {
     const compilerContext = new CompilerContext<BuiltInSymbol>(source);

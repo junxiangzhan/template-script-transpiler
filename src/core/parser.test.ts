@@ -1,20 +1,18 @@
 import { describe, it, expect } from "vitest";
-import { Parser, ParserStateType, ParsingRule, ParsingRuleResult } from "./parser";
-import { Tokenizer } from "./tokenizer";
-import { TokenMatcher, Token } from "./token";
+import { Parser, ParserStateType, ParsingRule } from "./parser";
+import { TokenMatcher, Token, TokenStream } from "./token";
 import { CompilerContext } from "./context";
 
 // Simple tokenizer mock that returns a fixed list of tokens
-class ArrayTokenizer extends Tokenizer<string, string> {
+class ArrayTokenizer implements TokenStream<string> {
     private tokens: Token<string>[];
     private index = 0;
 
     constructor(tokens: Token<string>[]) {
-        super((t) => t, [], null as any);
         this.tokens = tokens;
     }
 
-    override next(): Token<string> | undefined {
+    next(): Token<string> | undefined {
         if (this.index < this.tokens.length) {
             return this.tokens[this.index++];
         }
