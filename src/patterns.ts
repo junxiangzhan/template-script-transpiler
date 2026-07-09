@@ -13,6 +13,8 @@ export const enum StringLikePatternQuoteType {
     SingleQuote
 }
 
+const regexSpace = /\s/u;
+
 export class StringLikePattern implements Pattern<RawTokenType> {
     public quoteType = StringLikePatternQuoteType.DoubleQuote;
     public state = StringLikePatternState.Start;
@@ -61,10 +63,13 @@ export class StringLikePattern implements Pattern<RawTokenType> {
     }
 }
 
+const regexNumberStart = /\d/u;
+const regexNumberContinue = /[\p{Alphabetic}\d_]/u;
+
 export const enum NumberLikePatternState {
     Start,
-    Sign,
     BeforeDot,
+    Dot,
     AfterDot
 }
 
@@ -73,25 +78,13 @@ export class NumberLikePattern implements Pattern<RawTokenType> {
 
     next(char: string): PatternResult<RawTokenType> {
         // Eof or whitespace means the end of the token
-        if (char === undefined || /\s/u.test(char)) {
+        if (char === undefined || regexSpace.test(char)) {
             return { isAlive: false };
         }
 
         switch (this.state) {
             case NumberLikePatternState.Start:
-                if (char === "+" || char === "-") {
-                    this.state = NumberLikePatternState.Sign;
-                    return { isAlive: true };
-                }
-
-                if (/\d/u.test(char)) {
-                    this.state = NumberLikePatternState.BeforeDot;
-                    return { matchResult: RawTokenType.NumberLike, isAlive: true };
-                }
-
-                return { isAlive: false };
-            case NumberLikePatternState.Sign:
-                if (/\d/u.test(char)) {
+                if (regexNumberStart.test(char)) {
                     this.state = NumberLikePatternState.BeforeDot;
                     return { matchResult: RawTokenType.NumberLike, isAlive: true };
                 }
@@ -100,18 +93,26 @@ export class NumberLikePattern implements Pattern<RawTokenType> {
 
             case NumberLikePatternState.BeforeDot:
                 if (char === ".") {
-                    this.state = NumberLikePatternState.AfterDot;
+                    this.state = NumberLikePatternState.Dot;
                     return { isAlive: true };
                 }
 
-                if (/\d/u.test(char) || char === "_") {
+                if (regexNumberContinue.test(char)) {
+                    return { matchResult: RawTokenType.NumberLike, isAlive: true };
+                }
+
+                return { isAlive: false };
+
+            case NumberLikePatternState.Dot:
+                if (regexNumberStart.test(char)) {
+                    this.state = NumberLikePatternState.AfterDot;
                     return { matchResult: RawTokenType.NumberLike, isAlive: true };
                 }
 
                 return { isAlive: false };
 
             case NumberLikePatternState.AfterDot:
-                if (/\d/u.test(char) || char === "_") {
+                if (regexNumberContinue.test(char)) {
                     return { matchResult: RawTokenType.NumberLike, isAlive: true };
                 }
 
@@ -120,17 +121,20 @@ export class NumberLikePattern implements Pattern<RawTokenType> {
     }
 }
 
+const regexWordStart = /[\p{Alphabetic}_]/u;
+const regexWordContinue = /[\p{Alphabetic}\d_]/u;
+
 export class WordPattern implements Pattern<RawTokenType> {
     public isStart = true;
 
     next(char: string): PatternResult<RawTokenType> {
         // Eof or whitespace means the end of the token
-        if (char === undefined || /\s/u.test(char)) {
+        if (char === undefined || regexSpace.test(char)) {
             return { isAlive: false };
         }
 
         if (this.isStart) {
-            if (/[\p{Alphabetic}_]/u.test(char)) {
+            if (regexWordStart.test(char)) {
                 this.isStart = false;
                 return { matchResult: RawTokenType.Word, isAlive: true };
             }
@@ -138,7 +142,7 @@ export class WordPattern implements Pattern<RawTokenType> {
             return { isAlive: false };
         }
 
-        if (/[\p{Alphabetic}\d_]/u.test(char)) {
+        if (regexWordContinue.test(char)) {
             return { matchResult: RawTokenType.Word, isAlive: true };
         }
 
@@ -146,10 +150,14 @@ export class WordPattern implements Pattern<RawTokenType> {
     }
 }
 
+const regexTimeStampContinue = /[_\-:\p{Alphabetic}\d.]/u;
+
 export const enum TimeOrAmountLikePatternState {
     ForFirstChar,
     ForSecondChar,
-    Running
+    BeforeDot,
+    Dot,
+    AfterDot
 }
 
 export class TimeOrAmountLikePattern implements Pattern<RawTokenType> {
@@ -158,7 +166,7 @@ export class TimeOrAmountLikePattern implements Pattern<RawTokenType> {
 
     next(char: string): PatternResult<RawTokenType> {
         // Eof or whitespace means the end of the token
-        if (char === undefined || /\s/u.test(char)) {
+        if (char === undefined || regexSpace.test(char)) {
             return { isAlive: false };
         }
 
@@ -169,7 +177,7 @@ export class TimeOrAmountLikePattern implements Pattern<RawTokenType> {
                     this.tokenType = RawTokenType.DateTimeLike;
                     return { matchResult: this.tokenType, isAlive: true };
                 } else if (char === "$") {
-                    this.state = TimeOrAmountLikePatternState.Running;
+                    this.state = TimeOrAmountLikePatternState.BeforeDot;
                     this.tokenType = RawTokenType.AmountLike;
                     return { matchResult: this.tokenType, isAlive: true };
                 }
@@ -179,21 +187,54 @@ export class TimeOrAmountLikePattern implements Pattern<RawTokenType> {
                 if (char === "p" || char === "P") {
                     this.tokenType = RawTokenType.DeltaTimeLike;
                 }
-                this.state = TimeOrAmountLikePatternState.Running;
+                this.state = TimeOrAmountLikePatternState.BeforeDot;
                 // Fall through to check character validity in running state
-            case TimeOrAmountLikePatternState.Running:
+            case TimeOrAmountLikePatternState.BeforeDot:
+                if (char === ".") {
+                    this.state = TimeOrAmountLikePatternState.Dot;
+                    return { isAlive: true };
+                }
+
                 if (this.tokenType === RawTokenType.AmountLike) {
-                    if (/[\d_.]/u.test(char)) {
+                    if (regexNumberContinue.test(char)) {
                         return { matchResult: this.tokenType, isAlive: true };
                     }
-                } else if (this.tokenType === RawTokenType.DateTimeLike || this.tokenType === RawTokenType.DeltaTimeLike) {
-                    if (/[a-zA-Z0-9_.:-]/u.test(char)) {
+                } else if (this.tokenType === RawTokenType.DateTimeLike) {
+                    if (regexTimeStampContinue.test(char)) {
+                        return { matchResult: this.tokenType, isAlive: true };
+                    }
+                } else if (this.tokenType === RawTokenType.DeltaTimeLike) {
+                    if (regexNumberContinue.test(char)) {
+                        return { matchResult: this.tokenType, isAlive: true };
+                    }
+                }
+
+                return { isAlive: false };
+                
+            case TimeOrAmountLikePatternState.Dot:
+                if (regexNumberStart.test(char)) {
+                    this.state = TimeOrAmountLikePatternState.AfterDot;
+                    return { matchResult: this.tokenType, isAlive: true };
+                }
+
+                return { isAlive: false };
+
+            case TimeOrAmountLikePatternState.AfterDot:
+                if (this.tokenType === RawTokenType.AmountLike) {
+                    if (regexNumberContinue.test(char)) {
+                        return { matchResult: this.tokenType, isAlive: true };
+                    }
+                } else if (this.tokenType === RawTokenType.DateTimeLike) {
+                    if (regexTimeStampContinue.test(char)) {
+                        return { matchResult: this.tokenType, isAlive: true };
+                    }
+                } else if (this.tokenType === RawTokenType.DeltaTimeLike) {
+                    if (regexNumberContinue.test(char)) {
                         return { matchResult: this.tokenType, isAlive: true };
                     }
                 }
                 return { isAlive: false };
         }
-        return { isAlive: false };
     }
 }
 
@@ -218,9 +259,11 @@ export class TriviaPattern implements Pattern<RawTokenType> {
     }
 }
 
+const regexSymbol = /[\p{Punctuation}\p{Symbol}]/u;
+
 export class SymbolLikePattern implements Pattern<RawTokenType> {
     next(char: string): PatternResult<RawTokenType> {
-        if (char === undefined || /\s/u.test(char)) {
+        if (char === undefined || regexSpace.test(char)) {
             return { isAlive: false };
         }
 
@@ -228,7 +271,7 @@ export class SymbolLikePattern implements Pattern<RawTokenType> {
             return { isAlive: false };
         }
 
-        if (/[\p{Punctuation}\p{Symbol}]/u.test(char)) {
+        if (regexSymbol.test(char)) {
             return { matchResult: RawTokenType.SymbolLike, isAlive: true };
         }
 
@@ -245,9 +288,9 @@ export class DispatchPattern implements Pattern<RawTokenType> {
                 this.pattern = new StringLikePattern();
             } else if (char === "@" || char === "$") {
                 this.pattern = new TimeOrAmountLikePattern();
-            } else if (/[\p{Alphabetic}_]/u.test(char)) {
+            } else if (regexWordStart.test(char)) {
                 this.pattern = new WordPattern();
-            } else if (/\d/u.test(char)) {
+            } else if (regexNumberStart.test(char)) {
                 this.pattern = new NumberLikePattern();
             } else if (char === "#") {
                 this.pattern = new TriviaPattern();
