@@ -1,6 +1,15 @@
 
 export function singleQuoteToDoubleQuote(literal: string): string {
-    return `"${literal.slice(1, -1).replace(/\\.|"/g, match => match === '"' ? '\\"' : match)}"`;
+    return `"${literal.slice(1, -1).replace(/\\.|"/g, (match) => {
+        switch (match) {
+            case `"`:
+                return `\\"`;
+            case `\\'`:
+                return `'`;
+            default:
+                return match;
+        }
+    })}"`;
 }
 
 export interface PlainDateTime {

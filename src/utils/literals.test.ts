@@ -4,7 +4,7 @@ import { singleQuoteToDoubleQuote, parseDateTime, parseDuration } from "./litera
 describe("literals utility", () => {
     it("converts single quoted strings to double quotes escaping properly", () => {
         expect(singleQuoteToDoubleQuote("'hello'")).toBe('"hello"');
-        expect(singleQuoteToDoubleQuote("'he\\'llo'")).toBe('"he\\\'llo"');
+        expect(singleQuoteToDoubleQuote("'he\\'llo'")).toBe('"he\'llo"');
     });
 
     it("parses valid and invalid ISO DateTimes", () => {
